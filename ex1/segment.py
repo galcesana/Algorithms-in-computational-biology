@@ -31,6 +31,20 @@ def print_segments(s: np.ndarray, c: float) -> None:
     print(np.round(c, 3))
     return
 
+def print_segments_multi(s: np.ndarray, c: float, d: int) -> None:
+    """
+    Print segments array with 3 decimal places.
+    Each row contains [start, end, average].
+
+    Args:
+        s: numpy array of shape (n_segments, 3)
+        c: Total cost value of optimal segmentation
+    """
+    for row in s:
+        print(f"{int(row[0])} {int(row[1])} {np.round(row[2], 3)*d}")
+    print(np.round(c, 3))
+    return
+
 
 def calc_sum_s(j, i, cumulative_sum):
     return cumulative_sum[j - 1] - (cumulative_sum[i - 1] if i > 0 else 0)
@@ -129,8 +143,11 @@ def segment_multi_channel(x: np.ndarray, p: float, q: int):
                 # Precompute cumulative sums for efficient mean calculation
                 cumulative_sum = np.cumsum(column_values, dtype=np.float32)
                 cumulative_sum_squared = np.cumsum(column_values ** 2, dtype=np.float32)
+                channel_z_cost = segment_cost(i, j, cumulative_sum, cumulative_sum_squared) + p
+                seg_cost += channel_z_cost
 
-                seg_cost += segment_cost(i, j, cumulative_sum, cumulative_sum_squared) + p
+            seg_cost /= d  # TODO delete
+
             #update the cost array if a new minimum is found, and store the split point.
             if c[i] + seg_cost < c[j]:
                 c[j] = c[i] + seg_cost
@@ -147,12 +164,14 @@ def segment_multi_channel(x: np.ndarray, p: float, q: int):
             column_values = np.array([x[row][z] for row in range(len(x))])
             cumulative_sum = np.cumsum(column_values, dtype=np.float32)
             sum_s += calc_sum_s(j,i,cumulative_sum)
+
+        sum_s /= d  # TODO avg try
         mean_s = sum_s / segment_len
         s.append([i+1, j, mean_s])
         j = i
 
     s.reverse()  # Order segments from start to end
-    return np.array(s), c[n]-p
+    return np.array(s), c[n]*d-p
 
 def plot_one_channel(segments, seq):
     # Plotting the original signal
@@ -174,6 +193,37 @@ def plot_one_channel(segments, seq):
     plt.legend()
     plt.show()
 
+
+def plot_multi_channel_all_dots(segments, seq):
+    """
+    Plots all channels' data points on the same graph with a single color.
+
+    Parameters:
+        segments (list of lists): Each segment represented as [start, end, mean_value].
+        seq (2D array-like): Multi-channel data where each row is a time point and each column is a channel.
+    """
+    plt.figure(figsize=(10, 3))
+
+    # Plot all data points from all channels in blue
+    for channel in range(seq.shape[1]):
+        plt.plot(seq[:, channel], 'bo', markersize=3, label='Original Signal' if channel == 0 else "")
+
+    # Colors for segments
+    segment_colors = ['purple', 'orange', 'green', 'blue', 'red']
+
+    # Plot each segment with its respective color
+    for i, segment in enumerate(segments):
+        start, end, mean_value = int(segment[0]), int(segment[1]), segment[2]
+        plt.plot(range(start, end), [mean_value] * (end - start),
+                 color=segment_colors[i % len(segment_colors)], linewidth=4, label=f'Segment {i + 1}')
+
+    plt.xlabel('Index')
+    plt.ylabel('Value')
+    plt.title('Signal Segmentation - All Channels in One Color')
+    plt.legend()
+    plt.show()
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Process signal data from a text file.')
     parser.add_argument('--filepath', type=str, required=True, help='Path to the input text file')
@@ -187,9 +237,8 @@ if __name__ == '__main__':
         # print(seq)
         segments, total_cost = segment_multi_channel(seq, args.penalty, args.max_len)
         # print_multi_channel_segments(segments, total_cost)
-        plot_one_channel(segments, seq)
-        print_segments(segments, total_cost)
-
+        plot_multi_channel_all_dots(segments, seq)
+        print_segments_multi(segments, total_cost,len(seq[0]))
 
     else:
         segments, total_cost = segment(seq, args.penalty, args.max_len)
