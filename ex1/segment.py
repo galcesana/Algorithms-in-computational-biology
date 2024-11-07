@@ -1,5 +1,7 @@
 import numpy as np
 import argparse
+import matplotlib.pyplot as plt
+
 
 def read_signal_file(filepath: str) -> np.ndarray:
     """
@@ -13,6 +15,7 @@ def read_signal_file(filepath: str) -> np.ndarray:
         np.ndarray: Array of signal values from all columns
     """
     return np.loadtxt(filepath, delimiter='\t', dtype=np.float32)
+
 
 def print_segments(s: np.ndarray, c: float) -> None:
     """
@@ -28,21 +31,7 @@ def print_segments(s: np.ndarray, c: float) -> None:
     print(np.round(c, 3))
     return
 
-def print_segments(s: np.ndarray, c: float) -> None:
-    """
-    Print segments array with 3 decimal places.
-    Each row contains [start, end, average] for single-channel or [start, end] for multi-channel.
 
-    Args:
-        s: numpy array of shape (n_segments, 2 or 3)
-        c: Total cost value of optimal segmentation
-    """
-    for row in s:
-        if len(row) == 3:  # Single-channel
-            print(f"{int(row[0])} {int(row[1])} {np.round(row[2], 3)}")
-        elif len(row) == 2:  # Multi-channel
-            print(f"{int(row[0])} {int(row[1])}")
-    print(np.round(c, 3))
 
 def segment(x: np.ndarray, p: float, q: int):
     """
@@ -57,32 +46,44 @@ def segment(x: np.ndarray, p: float, q: int):
         s: numpy Array of segments. Shaped (n, 3), each row in format [start, end, average]
         c: Total cost value of optimal segmentation
     """
+    # TODO: implement
     n = len(x)
-    c = np.zeros(n + 1)
+    # array where cost[i] holds the minimum cost of segmenting (best score) the signal up to index 𝑖
+    c = np.full(n + 1, np.inf, dtype=np.float32)
+    c[0] = 0  # Base case: zero cost to segment an empty prefix
+    # traceback -  array to store the optimal split points for reconstruction of segments.
     t = np.zeros(n + 1, dtype=int)
-    dp = np.full(n + 1, float('inf'))
-    dp[0] = 0
 
-    for i in range(1, n + 1):
-        for j in range(max(0, i - q), i):
-            segment_mean = np.mean(x[j:i])
-            segment_cost = np.sum((x[j:i] - segment_mean) ** 2) + p
-            cost = dp[j] + segment_cost
-            if cost < dp[i]:
-                dp[i] = cost
-                t[i] = j
+    # Precompute cumulative sums for efficient mean calculation
+    cumulative_sum = np.cumsum(x, dtype=np.float32)
+    cumulative_sum_squared = np.cumsum(x ** 2, dtype=np.float32)
 
-    segments = []
-    idx = n
-    while idx > 0:
-        start = t[idx]
-        end = idx
-        segment_mean = np.mean(x[start:end])
-        segments.append([start, end - 1, segment_mean])
-        idx = start
 
-    segments.reverse()
-    return np.array(segments), dp[n]
+    # Dynamic programming to compute minimum cost
+    #For each possible end point 𝑗, evaluate possible starting points 𝑖, ensuring that j−i≤q to enforce the maximum
+    # segment length.
+    for j in range(1, n + 1):
+        for i in range(max(0, j - q), j):
+            seg_cost = segment_cost(i, j, cumulative_sum, cumulative_sum_squared) + p
+            #update the cost array if a new minimum is found, and store the split point.
+            if c[i] + seg_cost < c[j]:
+                c[j] = c[i] + seg_cost
+                t[j] = i
+
+    # Backtrack to retrieve the segments with traceback array
+    s = [] #segment array
+    j = n
+    while j > 0:
+        i = t[j]
+        segment_len = j - i
+        sum_s = calc_sum_s(j,i,cumulative_sum)
+        mean_s = sum_s / segment_len
+        s.append([i+1, j, mean_s])
+        j = i
+
+    s.reverse()  # Order segments from start to end
+    return np.array(s), c[n]-p
+
 
 def segment_multi_channel(x: np.ndarray, p: float, q: int):
     """
@@ -97,30 +98,26 @@ def segment_multi_channel(x: np.ndarray, p: float, q: int):
         s: numpy Array of segments. Shaped (n, 2), each row in format [start, end]
         c: Total cost value of optimal segmentation
     """
-    n, d = x.shape
-    dp = np.full(n + 1, float('inf'))
-    dp[0] = 0
-    t = np.zeros(n + 1, dtype=int)
 
-    for i in range(1, n + 1):
-        for j in range(max(0, i - q), i):
-            segment_mean = np.mean(x[j:i], axis=0)
-            segment_cost = np.sum((x[j:i] - segment_mean) ** 2) + p
-            cost = dp[j] + segment_cost
-            if cost < dp[i]:
-                dp[i] = cost
-                t[i] = j
+    # TODO: implement
+    return None
 
-    segments = []
-    idx = n
-    while idx > 0:
-        start = t[idx]
-        end = idx
-        segments.append([start, end - 1])
-        idx = start
 
-    segments.reverse()
-    return np.array(segments), dp[n]
+### helper func ###
+
+def calc_sum_s(j, i, cumulative_sum):
+    return cumulative_sum[j - 1] - (cumulative_sum[i - 1] if i > 0 else 0)
+
+def segment_cost(i, j, cumulative_sum=None, cumulative_sum_squared=None):
+  """Calculate cost of segment x[i:j] based on sse sum of squared errors."""
+  segment_len = j - i
+  sum_s = calc_sum_s(j,i,cumulative_sum)
+  sum_s2 = calc_sum_s(j,i,cumulative_sum_squared)
+  #mean_segment
+  mean_s = sum_s / segment_len
+  #calc sse - sum of squared errors - Opening the equation by abbreviated multiplication
+  sse = sum_s2 - 2 * mean_s * sum_s + segment_len * mean_s ** 2
+  return sse
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Process signal data from a text file.')
@@ -129,12 +126,30 @@ if __name__ == '__main__':
     parser.add_argument('--max_len', type=int, required=True, help='Maximum segment length')
     parser.add_argument('--is_multi_channel', type=bool, required=False, default=False, help='call segment_multi_channel')
     args = parser.parse_args()
-
     seq = read_signal_file(args.filepath)
 
     if args.is_multi_channel:
-        segments, total_cost = segment_multi_channel(seq, args.penalty, args.max_len)
+        pass # TODO: implement only if you completed the bonus part
     else:
         segments, total_cost = segment(seq, args.penalty, args.max_len)
 
-    print_segments(segments, total_cost)
+    print_segments(segments,total_cost)
+
+    # Plotting the original signal
+    plt.figure(figsize=(10, 3))
+    plt.plot(seq, 'bo', markersize=3, label='Original Signal')  # Blue dots for the original signal
+
+    # Colors for segments
+    segment_colors = ['purple', 'orange', 'green', 'blue', 'red']
+
+    # Plot each segment with its respective color
+    for i, segment in enumerate(segments):
+        start, end, mean_value = int(segment[0]), int(segment[1]), segment[2]
+        plt.plot(range(start, end), [mean_value] * (end - start),
+                 color=segment_colors[i % len(segment_colors)], linewidth=4, label=f'Segment {i + 1}')
+
+    plt.xlabel('Index')
+    plt.ylabel('Value')
+    plt.title('Signal Segmentation')
+    plt.legend()
+    plt.show()
