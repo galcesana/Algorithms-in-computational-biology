@@ -119,22 +119,7 @@ def segment_cost(i, j, cumulative_sum=None, cumulative_sum_squared=None):
   sse = sum_s2 - 2 * mean_s * sum_s + segment_len * mean_s ** 2
   return sse
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Process signal data from a text file.')
-    parser.add_argument('--filepath', type=str, required=True, help='Path to the input text file')
-    parser.add_argument('--penalty', type=float, required=True, help='Penalty parameter')
-    parser.add_argument('--max_len', type=int, required=True, help='Maximum segment length')
-    parser.add_argument('--is_multi_channel', type=bool, required=False, default=False, help='call segment_multi_channel')
-    args = parser.parse_args()
-    seq = read_signal_file(args.filepath)
-
-    if args.is_multi_channel:
-        pass # TODO: implement only if you completed the bonus part
-    else:
-        segments, total_cost = segment(seq, args.penalty, args.max_len)
-
-    print_segments(segments,total_cost)
-
+def plot_one_signal(segments):
     # Plotting the original signal
     plt.figure(figsize=(10, 3))
     plt.plot(seq, 'bo', markersize=3, label='Original Signal')  # Blue dots for the original signal
@@ -153,3 +138,23 @@ if __name__ == '__main__':
     plt.title('Signal Segmentation')
     plt.legend()
     plt.show()
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Process signal data from a text file.')
+    parser.add_argument('--filepath', type=str, required=True, help='Path to the input text file')
+    parser.add_argument('--penalty', type=float, required=True, help='Penalty parameter')
+    parser.add_argument('--max_len', type=int, required=True, help='Maximum segment length')
+    parser.add_argument('--is_multi_channel', type=bool, required=False, default=False, help='call segment_multi_channel')
+    args = parser.parse_args()
+    seq = read_signal_file(args.filepath)
+
+    if args.is_multi_channel:
+        pass # TODO: implement only if you completed the bonus part
+    else:
+        segments, total_cost = segment(seq, args.penalty, args.max_len)
+        plot_one_signal(segments)
+
+    print_segments(segments,total_cost)
+
+
