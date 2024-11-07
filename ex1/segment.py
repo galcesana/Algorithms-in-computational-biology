@@ -110,11 +110,51 @@ def segment_multi_channel(x: np.ndarray, p: float, q: int):
         s: numpy Array of segments. Shaped (n, 2), each row in format [start, end]
         c: Total cost value of optimal segmentation
     """
+    n = len(x)
+    d = len(x[0])
+    # array where cost[i] holds the minimum cost of segmenting (best score) the signal up to index 𝑖
+    c = np.full(n + 1, np.inf, dtype=np.float32)
+    c[0] = 0  # Base case: zero cost to segment an empty prefix
+    # traceback -  array to store the optimal split points for reconstruction of segments.
+    t = np.zeros(n + 1, dtype=int)
 
-    # TODO: implement
-    return None
+    # Dynamic programming to compute minimum cost
+    #For each possible end point 𝑗, evaluate possible starting points 𝑖, ensuring that j−i≤q to enforce the maximum
+    # segment length.
+    for j in range(1, n + 1):
+        for i in range(max(0, j - q), j):
+            seg_cost = 0
+            for z in range(d):
+                column_values = np.array([x[row][z] for row in range(len(x))])
+                # Precompute cumulative sums for efficient mean calculation
+                cumulative_sum = np.cumsum(column_values, dtype=np.float32)
+                cumulative_sum_squared = np.cumsum(column_values ** 2, dtype=np.float32)
 
-def plot_one_channel(segments):
+                seg_cost += segment_cost(i, j, cumulative_sum, cumulative_sum_squared) + p
+            #update the cost array if a new minimum is found, and store the split point.
+            if c[i] + seg_cost < c[j]:
+                c[j] = c[i] + seg_cost
+                t[j] = i
+
+    # Backtrack to retrieve the segments with traceback array
+    s = [] #segment array
+    j = n
+    while j > 0:
+        i = t[j]
+        segment_len = j - i
+        sum_s = 0
+        for z in range(d):
+            column_values = np.array([x[row][z] for row in range(len(x))])
+            cumulative_sum = np.cumsum(column_values, dtype=np.float32)
+            sum_s += calc_sum_s(j,i,cumulative_sum)
+        mean_s = sum_s / segment_len
+        s.append([i+1, j, mean_s])
+        j = i
+
+    s.reverse()  # Order segments from start to end
+    return np.array(s), c[n]-p
+
+def plot_one_channel(segments, seq):
     # Plotting the original signal
     plt.figure(figsize=(10, 3))
     plt.plot(seq, 'bo', markersize=3, label='Original Signal')  # Blue dots for the original signal
@@ -134,7 +174,6 @@ def plot_one_channel(segments):
     plt.legend()
     plt.show()
 
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Process signal data from a text file.')
     parser.add_argument('--filepath', type=str, required=True, help='Path to the input text file')
@@ -145,11 +184,17 @@ if __name__ == '__main__':
     seq = read_signal_file(args.filepath)
 
     if args.is_multi_channel:
-        pass # TODO: implement only if you completed the bonus part
+        # print(seq)
+        segments, total_cost = segment_multi_channel(seq, args.penalty, args.max_len)
+        # print_multi_channel_segments(segments, total_cost)
+        plot_one_channel(segments, seq)
+        print_segments(segments, total_cost)
+
+
     else:
         segments, total_cost = segment(seq, args.penalty, args.max_len)
-        plot_one_channel(segments)
+        plot_one_channel(segments, seq)
+        print_segments(segments, total_cost)
 
-    print_segments(segments,total_cost)
 
 
