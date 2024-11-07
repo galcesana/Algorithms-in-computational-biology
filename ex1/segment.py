@@ -32,6 +32,19 @@ def print_segments(s: np.ndarray, c: float) -> None:
     return
 
 
+def calc_sum_s(j, i, cumulative_sum):
+    return cumulative_sum[j - 1] - (cumulative_sum[i - 1] if i > 0 else 0)
+
+def segment_cost(i, j, cumulative_sum=None, cumulative_sum_squared=None):
+  """Calculate cost of segment x[i:j] based on sse sum of squared errors."""
+  segment_len = j - i
+  sum_s = calc_sum_s(j,i,cumulative_sum)
+  sum_s2 = calc_sum_s(j,i,cumulative_sum_squared)
+  #mean_segment
+  mean_s = sum_s / segment_len
+  #calc sse - sum of squared errors - Opening the equation by abbreviated multiplication
+  sse = sum_s2 - 2 * mean_s * sum_s + segment_len * mean_s ** 2
+  return sse
 
 def segment(x: np.ndarray, p: float, q: int):
     """
@@ -46,7 +59,6 @@ def segment(x: np.ndarray, p: float, q: int):
         s: numpy Array of segments. Shaped (n, 3), each row in format [start, end, average]
         c: Total cost value of optimal segmentation
     """
-    # TODO: implement
     n = len(x)
     # array where cost[i] holds the minimum cost of segmenting (best score) the signal up to index 𝑖
     c = np.full(n + 1, np.inf, dtype=np.float32)
@@ -102,24 +114,7 @@ def segment_multi_channel(x: np.ndarray, p: float, q: int):
     # TODO: implement
     return None
 
-
-### helper func ###
-
-def calc_sum_s(j, i, cumulative_sum):
-    return cumulative_sum[j - 1] - (cumulative_sum[i - 1] if i > 0 else 0)
-
-def segment_cost(i, j, cumulative_sum=None, cumulative_sum_squared=None):
-  """Calculate cost of segment x[i:j] based on sse sum of squared errors."""
-  segment_len = j - i
-  sum_s = calc_sum_s(j,i,cumulative_sum)
-  sum_s2 = calc_sum_s(j,i,cumulative_sum_squared)
-  #mean_segment
-  mean_s = sum_s / segment_len
-  #calc sse - sum of squared errors - Opening the equation by abbreviated multiplication
-  sse = sum_s2 - 2 * mean_s * sum_s + segment_len * mean_s ** 2
-  return sse
-
-def plot_one_signal(segments):
+def plot_one_channel(segments):
     # Plotting the original signal
     plt.figure(figsize=(10, 3))
     plt.plot(seq, 'bo', markersize=3, label='Original Signal')  # Blue dots for the original signal
@@ -153,7 +148,7 @@ if __name__ == '__main__':
         pass # TODO: implement only if you completed the bonus part
     else:
         segments, total_cost = segment(seq, args.penalty, args.max_len)
-        plot_one_signal(segments)
+        plot_one_channel(segments)
 
     print_segments(segments,total_cost)
 
