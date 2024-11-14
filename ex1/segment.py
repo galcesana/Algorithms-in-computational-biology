@@ -1,6 +1,8 @@
 import numpy as np
 import argparse
 import matplotlib.pyplot as plt
+import time
+
 
 def read_signal_file(filepath: str) -> np.ndarray:
     """
@@ -87,14 +89,16 @@ def segment(x: np.ndarray, p: float, q: int):
     # segment length.
     for j in range(1, n + 1):
         for i in range(max(0, j - q), j):
-            seg_cost = segment_cost(i, j, cumulative_sum, cumulative_sum_squared) + p
+            if i != 0:
+                seg_cost = segment_cost(i, j, cumulative_sum, cumulative_sum_squared) + p
+            else:
+                seg_cost = segment_cost(i, j, cumulative_sum, cumulative_sum_squared)
             #update the cost array if a new minimum is found, and store the split point.
             if c[i] + seg_cost < c[j]:
                 c[j] = c[i] + seg_cost
                 t[j] = i
-
     # Backtrack to retrieve the segments with traceback array
-    s = [] #segment array
+    s = []  # segment array
     j = n
     while j > 0:
         i = t[j]
@@ -105,7 +109,7 @@ def segment(x: np.ndarray, p: float, q: int):
         j = i
 
     s.reverse()  # Order segments from start to end
-    return np.array(s), c[n]-p
+    return np.array(s), c[n]
 
 def segment_multi_channel(x: np.ndarray, p: float, q: int):
     """
@@ -129,7 +133,8 @@ def segment_multi_channel(x: np.ndarray, p: float, q: int):
     t = np.zeros(n + 1, dtype=int)
 
     # Dynamic programming to compute minimum cost
-    #For each possible end point 𝑗, evaluate possible starting points 𝑖, ensuring that j−i≤q to enforce the maximum
+    # For each possible end point 𝑗, evaluate possible starting points 𝑖, ensuring that j−i≤q to enforce
+    # the maximum
     # segment length.
     for j in range(1, n + 1):
         for i in range(max(0, j - q), j):
@@ -139,7 +144,10 @@ def segment_multi_channel(x: np.ndarray, p: float, q: int):
                 # Precompute cumulative sums for efficient mean calculation
                 cumulative_sum = np.cumsum(column_values, dtype=np.float32)
                 cumulative_sum_squared = np.cumsum(column_values ** 2, dtype=np.float32)
-                channel_z_cost = segment_cost(i, j, cumulative_sum, cumulative_sum_squared) + p
+                if i != 0:
+                    channel_z_cost = segment_cost(i, j, cumulative_sum, cumulative_sum_squared) + p
+                else:
+                    channel_z_cost = segment_cost(i, j, cumulative_sum, cumulative_sum_squared)
                 seg_cost += channel_z_cost
 
             seg_cost /= d
@@ -167,7 +175,7 @@ def segment_multi_channel(x: np.ndarray, p: float, q: int):
         j = i
 
     s.reverse()  # Order segments from start to end
-    return np.array(s), c[n]*d-p
+    return np.array(s), c[n]*d
 
 
 def plot_one_channel(segments, seq, p, q):
@@ -195,7 +203,7 @@ def plot_one_channel(segments, seq, p, q):
     plt.show()
 
 
-def plot_multi_channel_all_dots(segments, seq):
+def plot_multi_channel_all_dots(segments, seq, p, q):
     """
     Plots all channels' data points on the same graph with a single color.
 
@@ -220,9 +228,93 @@ def plot_multi_channel_all_dots(segments, seq):
 
     plt.xlabel('Index')
     plt.ylabel('Value')
-    plt.title('Signal Segmentation - All Channels in One Color')
-    plt.legend()
+    plt.title(f'penalty = {p}, max_len = {q}')
+    # plt.legend()
+    plt.tight_layout()  # Adjust layout to fit everything nicely
+
     plt.show()
+
+
+
+
+def measure_max_lens_and_penalties(seq):
+    penalties = [0,0.1,0.15,0.5,1,1.5,2]
+    max_lens = [1,50,100,150,200,250,300]
+    results = []
+    # measuring running times
+    for p in penalties:
+        p_results = []
+        for q in max_lens:
+            start_time = time.time()
+            segments, total_cost = segment(seq, p, q)
+            end_time = time.time()
+            elapsed_time = end_time - start_time
+            p_results.append(elapsed_time)
+            # print(f"Elapsed time: {elapsed_time} seconds")
+        results.append(p_results)
+
+    # Plotting
+    plt.figure(figsize=(10, 6))
+
+    # Plot each penalty line
+    for i, p in enumerate(penalties):
+        plt.plot(max_lens, results[i], label=f"Penalty = {p}", marker='o')
+
+    # Adding labels and legend
+    plt.xlabel("max_lens")
+    plt.ylabel("Elapsed time (seconds)")
+    plt.title("Elapsed Time vs max_lens for Different Penalty Values")
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+    transposed_results = [list(row) for row in zip(*results)]
+    plt.figure(figsize=(10, 6))
+    # Plot each penalty line
+    for i, q in enumerate(max_lens):
+        plt.plot(penalties, transposed_results[i], label=f"max length = {q}", marker='o')
+
+    # Adding labels and legend
+    plt.xlabel("penalties")
+    plt.ylabel("Elapsed time (seconds)")
+    plt.title("Elapsed Time vs max_lens for Different Penalty Values")
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+def measure_seq_len(seq):
+    seqs = [seq]
+    seqs_lengths = [len(seq)]
+
+    for i in range(1, 5):
+        # Concatenate the array with itself to double the length
+        doubled_seq = np.concatenate((seqs[i - 1], seqs[i - 1]))
+        seqs.append(doubled_seq)
+        seqs_lengths.append(len(doubled_seq))
+
+    penalty = 0.1
+    max_len = 50
+    results = []
+    for s in seqs:
+        start_time = time.time()
+        segments, total_cost = segment(s, penalty, max_len)
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        results.append(elapsed_time)
+
+    # Plotting
+    plt.figure(figsize=(10, 6))
+    plt.plot(seqs_lengths, results, marker='o', color='b', linestyle='-')
+
+    # Adding labels and title
+    plt.xlabel("Sequence Length")
+    plt.ylabel("Elapsed Time (seconds)")
+    plt.title("Elapsed Time vs Sequence Length")
+    plt.grid(True)
+
+    # Show the plot
+    plt.show()
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Process signal data from a text file.')
@@ -235,7 +327,7 @@ if __name__ == '__main__':
 
     if args.is_multi_channel:
         segments, total_cost = segment_multi_channel(seq, args.penalty, args.max_len)
-        plot_multi_channel_all_dots(segments, seq)
+        plot_multi_channel_all_dots(segments, seq, args.penalty, args.max_len)
         print_segments_multi(segments, total_cost, len(seq[0]))
     else:
         segments, total_cost = segment(seq, args.penalty, args.max_len)
