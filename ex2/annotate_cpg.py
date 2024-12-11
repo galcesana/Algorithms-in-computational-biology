@@ -2,7 +2,11 @@ from Bio import SeqIO  # pip install biopython
 import argparse
 import gzip
 
-def parse_fasta_file(file_path: str):
+from sklearn.ensemble import RandomForestClassifier
+import numpy as np
+
+
+def parse_fasta_file(file_path: str)->dict:
     """
     Parses a FASTA file (plain or gzipped) and returns a mapping of sequence identifiers to nucleotide sequences.
 
@@ -45,6 +49,38 @@ def prepare_training_data(sequence_file: str, label_file: str):
     return [(sequences[seq_id], labels[seq_id]) for seq_id in sequences]
 
 
+def one_hot_encode_nucleotide(nuc: str):
+    """
+    One-hot encode a single nucleotide: A, C, G, T.
+    The order chosen is A,C,G,T.
+    Returns a numpy array of shape (4,).
+    """
+    mapping = {'A':[1,0,0,0],
+               'C':[0,1,0,0],
+               'G':[0,0,1,0],
+               'T':[0,0,0,1]}
+    return np.array(mapping.get(nuc, [0,0,0,0])) # if unknown char, all zeros
+
+def extract_features_and_labels(training_data):
+    """
+    Convert the list of (sequence, label) into feature matrix X and label vector y.
+    We will do a simple per-nucleotide classification:
+    X: Each row represents one position in one sequence.
+    y: The corresponding label ('C' or 'N').
+    """
+    X = []
+    y = []
+    for seq, lbl in training_data:
+        if len(seq) != len(lbl):
+            # Just a safety check
+            continue
+        for nuc, l in zip(seq, lbl):
+            X.append(one_hot_encode_nucleotide(nuc))
+            y.append(l)
+    X = np.vstack(X)
+    y = np.array(y)
+    return X, y
+
 def train_classifier(training_data):
     """
     Trains a classifier to identify CpG islands in DNA sequences.
@@ -56,9 +92,14 @@ def train_classifier(training_data):
         object: Your trained classifier model.
     """
     # TODO: Implement your model training logic here
-    model = None
-    return model
 
+    # Extract features and labels
+    X, y = extract_features_and_labels(training_data)
+
+    # Create and train the model
+    model = RandomForestClassifier(n_estimators=100, random_state=42)
+    model.fit(X, y)
+    return model
 
 def annotate_sequence(model, sequence):
     """
@@ -72,9 +113,15 @@ def annotate_sequence(model, sequence):
         str: A string of annotations, where 'C' marks a CpG island region and 'N' denotes non-CpG regions.
     """
     # TODO: Replace with your (hopefully better) prediction logic
-    annotations = ''.join(['C' if nucleotide == 'C' else 'N' for nucleotide in sequence])
-    return annotations
+    # For each nucleotide, predict 'C' or 'N'
+    X = [one_hot_encode_nucleotide(nuc) for nuc in sequence]
+    X = np.vstack(X)
+    predictions = model.predict(X)
+    return ''.join(predictions)
 
+    #
+    # annotations = ''.join(['C' if nucleotide == 'C' else 'N' for nucleotide in sequence])
+    # return annotations
 
 def annotate_fasta_file(model, input_path, output_path):
     """
@@ -95,8 +142,6 @@ def annotate_fasta_file(model, input_path, output_path):
             annotation = annotate_sequence(model, sequence)
             gzipped_file.write(f">{seq_id}\n{annotation}\n")
 
-
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Predict CpG islands in DNA sequences.")
     parser.add_argument("--fasta_path", type=str, help="Path to the input FASTA file containing DNA sequences.")
@@ -112,4 +157,4 @@ if __name__ == '__main__':
     classifier = train_classifier(training_data)
 
     # Annotate sequences and save predictions
-    annotate_fasta_file(classifier, args.fasta_path, args.output_path)
+    annotate_fasta_file(classifier, args.fasta_path, args.output_file)
