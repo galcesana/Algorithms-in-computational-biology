@@ -178,7 +178,6 @@ def print_matrix(matrix, title, row_labels=None, column_labels=None):
         print(f"{row_key:>3} {row}")
 
 
-
 def evaluate_model(model, sequence_file, label_file):
     """
     Compares predicted labels with the actual labels and calculates evaluation metrics.
@@ -189,7 +188,7 @@ def evaluate_model(model, sequence_file, label_file):
         label_file (str): Path to the FASTA file containing true labels.
 
     Returns:
-        dict: A dictionary with evaluation metrics (accuracy, precision, recall, F1-score, balanced accuracy).
+        dict: A dictionary with evaluation metrics (accuracy, precision, recall, F1-score).
     """
 
     sequences = parse_fasta_file(sequence_file)
@@ -207,19 +206,15 @@ def evaluate_model(model, sequence_file, label_file):
         all_true_labels.extend(true_label)
         all_predicted_labels.extend(predicted_label)
 
-    from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score, \
-        balanced_accuracy_score
+    from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
 
-    # Calculate evaluation metrics
     accuracy = accuracy_score(all_true_labels, all_predicted_labels)
-    balanced_accuracy = balanced_accuracy_score(all_true_labels, all_predicted_labels)
     precision = precision_score(all_true_labels, all_predicted_labels, average='weighted', zero_division=0)
     recall = recall_score(all_true_labels, all_predicted_labels, average='weighted', zero_division=0)
     f1 = f1_score(all_true_labels, all_predicted_labels, average='weighted', zero_division=0)
 
     metrics = {
         "accuracy": accuracy,
-        "balanced_accuracy": balanced_accuracy,
         "precision": precision,
         "recall": recall,
         "f1_score": f1
@@ -228,9 +223,11 @@ def evaluate_model(model, sequence_file, label_file):
     # Print evaluation metrics
     print("Comparison Metrics:")
     for metric, value in metrics.items():
-        print(f"{metric.replace('_', ' ').capitalize()}: {value:.4f}")
+        print(f"{metric.capitalize()}: {value:.4f}")
 
     return metrics
+
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Predict CpG islands in DNA sequences.")
